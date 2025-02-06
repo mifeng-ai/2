@@ -1,0 +1,46 @@
+name: Release
+on:
+  workflow_dispatch:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: get_info
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Install jq
+        run: choco install jq
+
+      - name: Get changelog
+        id: get_changelog
+        run: |
+          $version = "${{ env.version }}"
+          $changelog = (Get-Content CHANGELOG.md) -join "`n"
+          $changelog = $changelog -replace "(?s).*?## v$version", ""
+          $changelog = $changelog -replace "(?s)## v.*", ""
+          $changelog = $changelog -replace "(?s).*?###", "###"
+          $changelog = $changelog.TrimEnd("`n")
+          $changelog | jq -Rs '.' | ForEach-Object { echo "changelog=$_"; echo "changelog=$_" >> $env:GITHUB_ENV }
+        shell: pwsh
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.version }}
+          release_name: v${{ env.version }}
+          body: ${{ fromJSON(env.changelog) }}
+          draft: false
+          prerelease: false
